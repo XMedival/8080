@@ -1,2 +1,16 @@
-emulator/build
-compiler/compiler
+# Build outputs
+emulator/build/
+
+# Assembler
+compiler/asm8080
+compiler/*.hex
+
+# Editor/IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Claude
+.claude/

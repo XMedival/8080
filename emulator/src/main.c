@@ -25,6 +25,17 @@ static uint16_t parse_hex(const char *s) {
     return val;
 }
 
+// Parse exactly n hex digits
+static uint16_t parse_hex_n(const char *s, int n) {
+    uint16_t val = 0;
+    for (int i = 0; i < n && s[i]; i++) {
+        char c = toupper(s[i]);
+        if (c >= '0' && c <= '9') val = (val << 4) | (c - '0');
+        else if (c >= 'A' && c <= 'F') val = (val << 4) | (c - 'A' + 10);
+    }
+    return val;
+}
+
 // Print CPU state
 static void print_state(void) {
     printf("A=%02X BC=%04X DE=%04X HL=%04X SP=%04X PC=%04X\n",
@@ -203,12 +214,9 @@ static void monitor(void) {
                         }
 
                         // Parse: :LLAAAATT[DD...]CC
-                        uint8_t len = (parse_hex(&hexline[1]) >> 8) & 0xFF;
-                        len = ((hexline[1] >= 'A' ? hexline[1] - 'A' + 10 : hexline[1] - '0') << 4) |
-                              (hexline[2] >= 'A' ? hexline[2] - 'A' + 10 : hexline[2] - '0');
-                        uint16_t addr = parse_hex(&hexline[3]);
-                        uint8_t type = ((hexline[7] >= 'A' ? hexline[7] - 'A' + 10 : hexline[7] - '0') << 4) |
-                                       (hexline[8] >= 'A' ? hexline[8] - 'A' + 10 : hexline[8] - '0');
+                        uint8_t len = parse_hex_n(&hexline[1], 2);
+                        uint16_t addr = parse_hex_n(&hexline[3], 4);
+                        uint8_t type = parse_hex_n(&hexline[7], 2);
 
                         if (type == 0x01) {  // EOF record
                             printf("EOF record\n");
@@ -221,11 +229,7 @@ static void monitor(void) {
                                 first = false;
                             }
                             for (int i = 0; i < len; i++) {
-                                int idx = 9 + i * 2;
-                                uint8_t byte = ((hexline[idx] >= 'A' ? hexline[idx] - 'A' + 10 :
-                                                (hexline[idx] >= 'a' ? hexline[idx] - 'a' + 10 : hexline[idx] - '0')) << 4) |
-                                               (hexline[idx+1] >= 'A' ? hexline[idx+1] - 'A' + 10 :
-                                                (hexline[idx+1] >= 'a' ? hexline[idx+1] - 'a' + 10 : hexline[idx+1] - '0'));
+                                uint8_t byte = parse_hex_n(&hexline[9 + i * 2], 2);
                                 mem_write(addr + i, byte);
                                 total_bytes++;
                             }

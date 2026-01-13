@@ -1,8 +1,10 @@
 # Intel 8080 Emulator for Raspberry Pi Pico
 
-A fully functional Intel 8080 emulator running on the Raspberry Pi Pico with USB serial communication and Altair 8800-style front panel support.
+An Intel 8080 emulator running on the Raspberry Pi Pico with USB serial and Altair 8800-style front panel support.
 
 ## Building
+
+### Emulator
 
 Requires the Raspberry Pi Pico SDK.
 
@@ -15,160 +17,121 @@ make
 
 Flash the resulting `.uf2` file to your Pico.
 
-## Operating the Emulator
+### Assembler
 
-Connect via USB serial (115200 baud). The emulator provides an interactive monitor with the following commands:
+```bash
+cd compiler
+make
+```
+
+## Assembler Usage
+
+```bash
+./asm8080 input.asm output.hex
+```
+
+### Supported Syntax
+
+```asm
+; Comments start with semicolon
+        ORG 0           ; Set origin address
+
+START:  MVI A, 'H'      ; Labels end with colon
+        OUT 1           ; Output to port
+        LXI H, 1000h    ; Hex numbers end with H
+        MVI B, 10       ; Decimal numbers
+        MVI C, 01010101B; Binary numbers end with B
+        JMP START       ; Jump to label
+        HLT
+
+        DB 'A'          ; Define byte (character)
+        DB 48h          ; Define byte (hex)
+        DW 1234h        ; Define word
+        DS 16           ; Define space (16 bytes)
+COUNT:  EQU 10          ; Equate (constant)
+```
+
+### Full Instruction Set
+
+All 8080 instructions supported: MOV, MVI, LXI, LDA, STA, LDAX, STAX, LHLD, SHLD, XCHG, ADD, ADC, SUB, SBB, INR, DCR, INX, DCX, DAD, ANA, ORA, XRA, CMP, ADI, ACI, SUI, SBI, ANI, ORI, XRI, CPI, RLC, RRC, RAL, RAR, JMP, Jcc, CALL, Ccc, RET, Rcc, RST, PUSH, POP, IN, OUT, EI, DI, HLT, NOP, PCHL, SPHL, XTHL, DAA, CMA, STC, CMC.
+
+## Monitor Commands
+
+Connect via USB serial (115200 baud):
 
 | Command | Description |
 |---------|-------------|
 | `r` | Run until HLT or keypress |
-| `s` | Single step one instruction |
-| `g addr` | Set program counter to address |
-| `e addr b` | Enter byte(s) at address |
-| `d addr n` | Dump n bytes starting at address |
-| `u addr n` | Disassemble n instructions at address |
-| `l` | Load Intel HEX format program |
-| `?` | Show CPU state (registers, flags, PC) |
-| `x` | Reset CPU and clear memory |
+| `s` | Single step |
+| `g addr` | Set PC to address |
+| `e addr b...` | Enter bytes at address |
+| `d addr n` | Dump n bytes |
+| `u addr n` | Disassemble n instructions |
+| `l` | Load Intel HEX |
+| `?` | Show CPU state |
+| `x` | Reset CPU and memory |
 
 ### Loading Programs
 
-Use the `l` command to paste Intel HEX format code. The included COBOL compiler can assemble `.a80` files to Intel HEX format:
-
-```bash
-cd compiler
-./compiler < test.a80 > program.hex
+```
+> l
+Paste Intel HEX (end with EOF record or blank line):
+:0D0000003E48D3013E69D3013E0AD301768C
+:00000001FF
+Loaded 13 bytes starting at 0000h
+> r
+Hi
 ```
 
 ## I/O Ports
 
-| Port | Name | Direction | Description |
-|------|------|-----------|-------------|
-| `0x00` | Serial Status | IN | Bit 0: RX ready, Bit 1: TX ready |
-| `0x01` | Serial Data | IN/OUT | Read/write serial data via USB |
-| `0xFE` | Sense Switches Lo | IN | Front panel switches (bits 0-7) |
-| `0xFF` | Sense Switches Hi | IN | Front panel switches (bits 8-15) |
+| Port | Direction | Description |
+|------|-----------|-------------|
+| 0x00 | IN | Serial status (bit 0: RX ready, bit 1: TX ready) |
+| 0x01 | IN/OUT | Serial data |
+| 0xFE | IN | Sense switches low (SW7-SW0) |
+| 0xFF | IN | Sense switches high (SW15-SW8) |
 
-### Serial I/O Example
+## Front Panel
 
-```asm
-; Wait for TX ready, then send character
-WAIT:   IN   0x00       ; Read status
-        ANI  0x02       ; Check TX ready bit
-        JZ   WAIT       ; Loop if not ready
-        MVI  A, 'H'     ; Character to send
-        OUT  0x01       ; Output to serial
-
-; Check for received character
-        IN   0x00       ; Read status
-        ANI  0x01       ; Check RX ready bit
-        JZ   NO_CHAR    ; Skip if no character
-        IN   0x01       ; Read the character
-```
-
-## GPIO Pin Assignments
-
-The front panel uses shift registers for LED output and switch input.
-
-### Output (74HC595 Chain)
+### GPIO Pins
 
 | GPIO | Function |
 |------|----------|
-| 2 | 595 Data (serial input) |
+| 2 | 595 Data |
 | 3 | 595 Clock |
 | 4 | 595 Latch |
-
-### Input (74HC165 Chain)
-
-| GPIO | Function |
-|------|----------|
-| 5 | 165 Data (serial output) |
+| 5 | 165 Data |
 | 6 | 165 Clock |
-| 7 | 165 Load (parallel capture) |
+| 7 | 165 Load |
 
-## Front Panel LED Chain
+### LED Chain (5x 74HC595)
 
-5x 74HC595 shift registers daisy-chained, outputting 40 bits (MSB first):
+40 bits, MSB first:
+- Bits 39-32: Status (INTE, PROT, MEMR, INP, M1, OUT, HLTA, STACK)
+- Bits 31-24: Status low
+- Bits 23-16: Data bus (D7-D0)
+- Bits 15-0: Address bus (A15-A0)
 
-| Bits | Content |
-|------|---------|
-| 39-32 | Status High: INTE, PROT, MEMR, INP, M1, OUT, HLTA, STACK |
-| 31-24 | Status Low: WO, INT, ... |
-| 23-16 | Data bus (D7-D0) |
-| 15-8 | Address High (A15-A8) |
-| 7-0 | Address Low (A7-A0) |
+### Switch Chain (3x 74HC165)
 
-### Status LED Bits
-
-| Bit | Name | Description |
-|-----|------|-------------|
-| 0x80 | INTE | Interrupt Enable |
-| 0x40 | PROT | Memory Protection |
-| 0x20 | MEMR | Memory Read |
-| 0x10 | INP | Input operation |
-| 0x08 | M1 | Machine cycle 1 (opcode fetch) |
-| 0x04 | OUT | Output operation |
-| 0x02 | HLTA | Halt Acknowledge |
-| 0x01 | STACK | Stack operation |
-
-## Front Panel Switch Chain
-
-3x 74HC165 shift registers, reading 24 bits (MSB first):
-
-| Bits | Content |
-|------|---------|
-| 23-16 | Control switches |
-| 15-8 | Sense switches high (SW15-SW8) |
-| 7-0 | Sense switches low (SW7-SW0) |
-
-### Control Switch Bits
-
-| Bit | Name |
-|-----|------|
-| 0x80 | RESET |
-| 0x40 | DEPOSIT NEXT |
-| 0x20 | DEPOSIT |
-| 0x10 | EXAMINE NEXT |
-| 0x08 | EXAMINE |
-| 0x04 | SINGLE STEP |
-| 0x02 | RUN |
-| 0x01 | STOP |
-
-## Memory
-
-- 64KB flat address space (0x0000 - 0xFFFF)
-- Programs typically load at 0x0000
-- Stack grows downward (initialize SP to top of RAM)
-
-## CPU Features
-
-Full Intel 8080 instruction set with accurate cycle timing:
-
-- All register operations (MOV, MVI, LXI, etc.)
-- Arithmetic (ADD, ADC, SUB, SBB, INR, DCR, DAD)
-- Logical (ANA, XRA, ORA, CMP)
-- Rotate (RLC, RRC, RAL, RAR)
-- Jumps and calls (conditional and unconditional)
-- Stack operations (PUSH, POP)
-- I/O (IN, OUT)
-- Interrupts (DI, EI, RST 0-7)
+24 bits, MSB first:
+- Bits 23-16: Control (RESET, DEP NEXT, DEP, EXAM NEXT, EXAM, STEP, RUN, STOP)
+- Bits 15-0: Sense switches (SW15-SW0)
 
 ## Project Structure
 
 ```
-emulator/src/
-  main.c      - Monitor and initialization
-  cpu.c       - 8080 instruction set implementation
-  cpu.h       - CPU registers and types
-  io.c        - I/O port handlers
-  io.h        - Port definitions
-  memory.c    - RAM management
-  memory.h    - Memory interface
-  panel.c     - Front panel driver
-  panel.h     - GPIO and status definitions
+emulator/
+  src/
+    main.c    - Monitor, Intel HEX loader
+    cpu.c/h   - 8080 CPU emulation
+    memory.c/h- 64KB RAM
+    io.c/h    - I/O port handlers
+    panel.c/h - Front panel shift register driver
+  CMakeLists.txt
 
 compiler/
-  compiler.cbl - COBOL assembler source
-  compiler     - Compiled assembler
-  test.a80     - Example assembly program
+  asm8080.c - 8080 assembler (C)
+  Makefile
 ```
