@@ -1,0 +1,13 @@
+	   ORG 0000H
+START:	MVI A, 'H'
+	    CALL PUTC
+		MVI A,'i'
+		CALL PUTC
+		MVI A,0AH
+		CALL PUTC
+		HLT
+
+PUTC:	OUT 01H
+	    RET
+
+		END
